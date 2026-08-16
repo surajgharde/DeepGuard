@@ -30,7 +30,14 @@ class Settings(BaseSettings):
 
     database_url: str = f"sqlite:///{(BASE_DIR / 'deepguard.db').as_posix()}"
     public_base_url: str = "http://localhost:8000"
-    cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    # localhost:3000 is the Next.js default; 3001/3002 are included because
+    # `next dev` falls back to them when 3000 is already taken.
+    cors_origins: list[str] = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:3001",
+        "http://localhost:3002",
+    ]
 
     max_upload_mb: int = 100
     allowed_extensions: list[str] = [".mp4", ".avi", ".mov"]

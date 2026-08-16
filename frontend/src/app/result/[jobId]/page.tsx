@@ -5,8 +5,10 @@ import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { ConfidenceGauge } from "@/components/ConfidenceGauge";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { DownloadReportButton } from "@/components/DownloadReportButton";
 import { GradCamStrip } from "@/components/GradCamStrip";
+import { Icon } from "@/components/Icon";
 import { ModalityCard } from "@/components/ModalityCard";
 import { ProgressView } from "@/components/ProgressView";
 import { useToast } from "@/components/ToastProvider";
@@ -22,6 +24,7 @@ export default function ResultPage(): JSX.Element {
   const router = useRouter();
   const toast = useToast();
   const { job, loading, error, refresh } = useJobPolling(jobId);
+  const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   const handleDelete = async (): Promise<void> => {
@@ -34,27 +37,37 @@ export default function ResultPage(): JSX.Element {
     } catch (caught) {
       toast.error(errorMessage(caught));
       setDeleting(false);
+      setConfirming(false);
     }
   };
 
-  if (loading && !job) {
-    return <SkeletonResult />;
-  }
+  const copyLink = async (): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      toast.success("Link copied to clipboard.");
+    } catch {
+      toast.error("Could not access the clipboard.");
+    }
+  };
+
+  if (loading && !job) return <SkeletonResult />;
 
   if (!job) {
     return (
       <StateCard
+        icon="alert"
         title={error ? "Could not load this analysis" : "Analysis not found"}
         body={error ?? "This job no longer exists — it may have been deleted."}
         action={
-          <div className="flex gap-3">
-            <button type="button" onClick={refresh} className="btn-ghost">
+          <>
+            <button type="button" onClick={refresh} className="btn-secondary">
+              <Icon name="refresh" className="h-4 w-4" />
               Retry
             </button>
             <Link href="/history" className="btn-primary">
               Back to history
             </Link>
-          </div>
+          </>
         }
       />
     );
@@ -62,26 +75,35 @@ export default function ResultPage(): JSX.Element {
 
   if (job.status === "failed") {
     return (
-      <StateCard
-        title="Analysis failed"
-        body={job.error ?? "The pipeline stopped unexpectedly."}
-        tone="fake"
-        action={
-          <div className="flex gap-3">
-            <Link href="/" className="btn-primary">
-              Try another video
-            </Link>
-            <button
-              type="button"
-              onClick={() => void handleDelete()}
-              disabled={deleting}
-              className="btn-ghost"
-            >
-              Delete job
-            </button>
-          </div>
-        }
-      />
+      <>
+        <StateCard
+          icon="alert"
+          tone="fake"
+          title="Analysis failed"
+          body={job.error ?? "The pipeline stopped unexpectedly."}
+          action={
+            <>
+              <Link href="/" className="btn-primary">
+                <Icon name="upload" className="h-4 w-4" weight={2} />
+                Try another video
+              </Link>
+              <button type="button" onClick={() => setConfirming(true)} className="btn-secondary">
+                Delete job
+              </button>
+            </>
+          }
+        />
+        <ConfirmDialog
+          open={confirming}
+          title="Delete this analysis?"
+          body="The job record and any stored files are removed from the server. This cannot be undone."
+          detail={job.filename}
+          confirmLabel="Delete permanently"
+          busy={deleting}
+          onConfirm={() => void handleDelete()}
+          onCancel={() => setConfirming(false)}
+        />
+      </>
     );
   }
 
@@ -104,17 +126,28 @@ export default function ResultPage(): JSX.Element {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      {/* --------------------------------------------------------- action bar */}
+      <div className="sticky top-16 z-30 -mx-5 flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-3 glass sm:-mx-8 sm:px-8">
         <BackLink />
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void copyLink()}
+            className="btn-secondary"
+            title="Copy a link to this result"
+          >
+            <Icon name="copy" className="h-4 w-4" />
+            <span className="hidden sm:inline">Copy link</span>
+          </button>
           <DownloadReportButton job={job} />
           <button
             type="button"
-            onClick={() => void handleDelete()}
-            disabled={deleting}
-            className="btn-ghost"
+            onClick={() => setConfirming(true)}
+            className="btn-icon border border-line hover:border-fake/50 hover:bg-fake/10 hover:text-fake"
+            aria-label="Delete this analysis"
+            title="Delete this analysis"
           >
-            {deleting ? "Deleting…" : "Delete"}
+            <Icon name="trash" className="h-4 w-4" />
           </button>
         </div>
       </div>
@@ -125,22 +158,25 @@ export default function ResultPage(): JSX.Element {
         filename={job.filename}
       />
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
-        <section className="card flex flex-col items-center gap-5 p-6">
-          <h2 className="section-title self-start">Overall confidence</h2>
-          <ConfidenceGauge value={result.confidence} verdict={result.verdict} />
-          <dl className="grid w-full grid-cols-2 gap-3 text-sm">
+      {/* ------------------------------------------------------ gauge + source */}
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,330px)_minmax(0,1fr)]">
+        <section className="card flex flex-col gap-5 p-6">
+          <h2 className="section-title">Overall confidence</h2>
+          <div className="flex justify-center py-1">
+            <ConfidenceGauge value={result.confidence} verdict={result.verdict} />
+          </div>
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-4 border-t border-line pt-5">
             <Stat label="Clip length" value={`${result.duration_seconds.toFixed(1)} s`} />
-            <Stat label="Frames" value={String(result.frames_analyzed)} />
+            <Stat label="Frames analysed" value={String(result.frames_analyzed)} />
             <Stat label="Inference" value={`${(result.processing_time_ms / 1000).toFixed(1)} s`} />
             <Stat label="File size" value={formatBytes(job.size_bytes)} />
           </dl>
         </section>
 
-        <section className="card overflow-hidden">
-          <div className="flex items-center justify-between border-b border-line px-5 py-3">
+        <section className="card flex flex-col overflow-hidden">
+          <div className="flex items-center justify-between gap-4 border-b border-line px-5 py-3">
             <h2 className="section-title">Source clip</h2>
-            <span className="truncate pl-4 text-xs text-faint" title={job.filename}>
+            <span className="truncate text-xs text-faint" title={job.filename}>
               {job.filename}
             </span>
           </div>
@@ -151,18 +187,19 @@ export default function ResultPage(): JSX.Element {
               controls
               preload="metadata"
               poster={job.thumbnail_url ?? undefined}
-              className="aspect-video w-full bg-black object-contain"
+              className="aspect-video w-full flex-1 bg-black object-contain"
             />
           ) : (
-            <div className="relative flex aspect-video w-full items-center justify-center bg-black">
+            <div className="relative flex aspect-video w-full flex-1 items-center justify-center bg-black">
               {job.thumbnail_url && (
+                /* eslint-disable-next-line @next/next/no-img-element */
                 <img
                   src={job.thumbnail_url}
                   alt=""
-                  className="absolute inset-0 h-full w-full object-cover opacity-30"
+                  className="absolute inset-0 h-full w-full object-cover opacity-25"
                 />
               )}
-              <p className="relative max-w-xs px-6 text-center text-sm text-muted">
+              <p className="relative max-w-xs px-6 text-center text-sm text-white/70">
                 Source video is not stored for this record (seeded demo entry).
               </p>
             </div>
@@ -170,43 +207,65 @@ export default function ResultPage(): JSX.Element {
         </section>
       </div>
 
+      {/* ------------------------------------------------------------ branches */}
       <section className="space-y-4">
-        <div className="flex items-baseline justify-between gap-4">
-          <h2 className="section-title">Per-modality breakdown</h2>
-          <p className="text-xs text-faint">higher score = stronger manipulation evidence</p>
-        </div>
+        <SectionHeading
+          title="Per-modality breakdown"
+          hint="higher score = stronger manipulation evidence"
+        />
         <div className="grid gap-4 md:grid-cols-3">
           {MODALITY_KEYS.map((key, index) => {
             const modality = result.modalities[key];
             if (!modality) return null;
-            return (
-              <ModalityCard key={key} branch={key} data={modality} delayMs={index * 120} />
-            );
+            return <ModalityCard key={key} branch={key} data={modality} delayMs={index * 130} />;
           })}
         </div>
       </section>
 
+      {/* ------------------------------------------------------------ grad-cam */}
       <section className="space-y-4">
-        <div className="flex items-baseline justify-between gap-4">
-          <h2 className="section-title">Grad-CAM frames</h2>
-          <p className="text-xs text-faint">regions influencing the visual decision</p>
-        </div>
+        <SectionHeading
+          title="Grad-CAM frames"
+          hint="regions that drove the visual decision — click to enlarge"
+        />
         <GradCamStrip frames={result.gradcam_frames} />
       </section>
 
-      <section className="card p-5">
+      {/* ------------------------------------------------------------ metadata */}
+      <section className="card p-5 sm:p-6">
         <h2 className="section-title">Run metadata</h2>
         <dl className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Stat label="Job ID" value={job.job_id.slice(0, 8)} mono />
           <Stat label="Submitted" value={formatDate(job.created_at)} />
-          <Stat
-            label="Completed"
-            value={job.completed_at ? formatDate(job.completed_at) : "—"}
-          />
+          <Stat label="Completed" value={job.completed_at ? formatDate(job.completed_at) : "—"} />
           <Stat label="Model version" value={result.model_version} mono />
         </dl>
-        {result.notes && <p className="mt-5 text-xs leading-relaxed text-faint">{result.notes}</p>}
+        {result.notes && (
+          <p className="mt-5 border-t border-line pt-4 text-xs leading-relaxed text-faint">
+            {result.notes}
+          </p>
+        )}
       </section>
+
+      <ConfirmDialog
+        open={confirming}
+        title="Delete this analysis?"
+        body="The job record, the uploaded video and every generated Grad-CAM frame are removed from the server. This cannot be undone."
+        detail={job.filename}
+        confirmLabel="Delete permanently"
+        busy={deleting}
+        onConfirm={() => void handleDelete()}
+        onCancel={() => setConfirming(false)}
+      />
+    </div>
+  );
+}
+
+function SectionHeading({ title, hint }: { title: string; hint: string }): JSX.Element {
+  return (
+    <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+      <h2 className="section-title">{title}</h2>
+      <p className="text-xs text-faint">{hint}</p>
     </div>
   );
 }
@@ -215,20 +274,12 @@ function BackLink(): JSX.Element {
   return (
     <Link
       href="/history"
-      className="inline-flex items-center gap-2 text-sm text-muted transition-colors hover:text-fg"
+      className="group inline-flex items-center gap-2 rounded-lg text-sm font-medium text-muted transition-colors hover:text-fg"
     >
-      <svg
-        className="h-4 w-4"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-      >
-        <path d="M19 12H5m0 0 7 7m-7-7 7-7" />
-      </svg>
+      <Icon
+        name="arrow-left"
+        className="h-4 w-4 transition-transform duration-200 group-hover:-translate-x-0.5"
+      />
       All analyses
     </Link>
   );
@@ -244,9 +295,12 @@ function Stat({
   mono?: boolean;
 }): JSX.Element {
   return (
-    <div>
-      <dt className="text-[11px] uppercase tracking-wider text-faint">{label}</dt>
-      <dd className={`mt-1 truncate text-sm text-fg ${mono ? "font-mono" : ""}`} title={value}>
+    <div className="min-w-0">
+      <dt className="text-[10.5px] font-semibold uppercase tracking-wider text-faint">{label}</dt>
+      <dd
+        className={`mt-1 truncate text-sm font-medium text-fg ${mono ? "font-mono" : ""}`}
+        title={value}
+      >
         {value}
       </dd>
     </div>
@@ -254,40 +308,51 @@ function Stat({
 }
 
 function StateCard({
+  icon,
   title,
   body,
   action,
   tone = "neutral",
 }: {
+  icon: "alert" | "info";
   title: string;
   body: string;
   action: JSX.Element;
   tone?: "neutral" | "fake";
 }): JSX.Element {
+  const danger = tone === "fake";
   return (
     <div
-      className={`mx-auto max-w-xl rounded-2xl border p-8 text-center ${
-        tone === "fake" ? "border-fake/40 bg-fake/[0.06]" : "border-line bg-panel"
+      className={`mx-auto max-w-xl rounded-2xl border p-8 text-center shadow-soft animate-fade-up sm:p-10 ${
+        danger ? "border-fake/35 bg-fake/[0.06]" : "card"
       }`}
     >
-      <h1 className="text-xl font-medium text-fg">{title}</h1>
-      <p className="mt-3 text-sm leading-relaxed text-muted">{body}</p>
-      <div className="mt-6 flex justify-center">{action}</div>
+      <span
+        className={`mx-auto flex h-12 w-12 items-center justify-center rounded-2xl ${
+          danger ? "bg-fake/10 text-fake" : "bg-panel2 text-muted"
+        }`}
+      >
+        <Icon name={icon} className="h-5 w-5" />
+      </span>
+      <h1 className="mt-5 text-xl font-semibold text-fg">{title}</h1>
+      <p className="mx-auto mt-2.5 max-w-md text-sm leading-relaxed text-muted">{body}</p>
+      <div className="mt-7 flex flex-wrap justify-center gap-3">{action}</div>
     </div>
   );
 }
 
 function SkeletonResult(): JSX.Element {
   return (
-    <div className="space-y-6" aria-busy="true">
-      <div className="h-32 animate-pulse rounded-2xl bg-panel" />
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
-        <div className="h-72 animate-pulse rounded-2xl bg-panel" />
-        <div className="h-72 animate-pulse rounded-2xl bg-panel" />
+    <div className="space-y-6" aria-busy="true" aria-label="Loading analysis">
+      <div className="skeleton h-10 w-40 rounded-xl" />
+      <div className="skeleton h-40" />
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,330px)_minmax(0,1fr)]">
+        <div className="skeleton h-[22rem]" />
+        <div className="skeleton h-[22rem]" />
       </div>
       <div className="grid gap-4 md:grid-cols-3">
         {[0, 1, 2].map((index) => (
-          <div key={index} className="h-52 animate-pulse rounded-2xl bg-panel" />
+          <div key={index} className="skeleton h-56" />
         ))}
       </div>
     </div>

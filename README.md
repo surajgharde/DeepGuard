@@ -50,6 +50,9 @@ npm run dev
 `.env.local` is already present with working defaults. Copy `.env.example` if you need to
 change the API URL.
 
+> If port 3000 is busy, `next dev` falls back to 3001/3002 — both are already in the
+> backend's allowed CORS origins. For any other port, add it to `DEEPGUARD_CORS_ORIGINS`.
+
 ---
 
 ## Configuration
@@ -63,7 +66,7 @@ Both sides are fully env-driven; no URLs are hardcoded.
 | `DEEPGUARD_PIPELINE` | `mock` | `mock` or `real` |
 | `DEEPGUARD_DATABASE_URL` | `sqlite:///.../deepguard.db` | SQLAlchemy URL |
 | `DEEPGUARD_PUBLIC_BASE_URL` | `http://localhost:8000` | Used to build absolute image/video URLs |
-| `DEEPGUARD_CORS_ORIGINS` | `http://localhost:3000,...` | Comma-separated allowed origins |
+| `DEEPGUARD_CORS_ORIGINS` | `http://localhost:3000,127.0.0.1:3000,:3001,:3002` | Comma-separated allowed origins |
 | `DEEPGUARD_MAX_UPLOAD_MB` | `100` | Upload size limit |
 | `DEEPGUARD_UPLOAD_DIR` / `DEEPGUARD_OUTPUT_DIR` | `uploads` / `outputs` | Storage roots |
 | `DEEPGUARD_SEED_ON_STARTUP` | `true` | Insert demo history when the DB is empty |

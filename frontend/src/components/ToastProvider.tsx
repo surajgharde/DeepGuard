@@ -1,6 +1,8 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
+
+import { Icon, type IconName } from "@/components/Icon";
 
 type ToastVariant = "success" | "error" | "info";
 
@@ -8,6 +10,7 @@ interface Toast {
   id: number;
   variant: ToastVariant;
   message: string;
+  durationMs: number;
 }
 
 interface ToastContextValue {
@@ -19,32 +22,38 @@ interface ToastContextValue {
 
 const ToastContext = createContext<ToastContextValue | null>(null);
 
-const VARIANT_STYLES: Record<ToastVariant, string> = {
-  success: "border-real/40 bg-real/10 text-real",
-  error: "border-fake/40 bg-fake/10 text-fake",
-  info: "border-accent/40 bg-accent/10 text-accent2",
+const VARIANTS: Record<
+  ToastVariant,
+  { icon: IconName; accent: string; iconBg: string; bar: string }
+> = {
+  success: { icon: "check", accent: "text-real", iconBg: "bg-real/10 text-real", bar: "bg-real" },
+  error: { icon: "alert", accent: "text-fake", iconBg: "bg-fake/10 text-fake", bar: "bg-fake" },
+  info: { icon: "info", accent: "text-accent", iconBg: "bg-accent/10 text-accent", bar: "bg-accent" },
 };
 
-const VARIANT_ICON: Record<ToastVariant, string> = {
-  success: "M20 6 9 17l-5-5",
-  error: "M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z",
-  info: "M12 16v-4m0-4h.01M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z",
-};
+const MAX_VISIBLE = 3;
 
 let nextId = 0;
 
 export function ToastProvider({ children }: { children: ReactNode }): JSX.Element {
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const timers = useRef(new Map<number, number>());
 
   const dismiss = useCallback((id: number) => {
+    const timer = timers.current.get(id);
+    if (timer !== undefined) {
+      window.clearTimeout(timer);
+      timers.current.delete(id);
+    }
     setToasts((current) => current.filter((toast) => toast.id !== id));
   }, []);
 
   const push = useCallback(
     (message: string, variant: ToastVariant = "info") => {
       const id = nextId++;
-      setToasts((current) => [...current.slice(-3), { id, variant, message }]);
-      window.setTimeout(() => dismiss(id), variant === "error" ? 7000 : 4500);
+      const durationMs = variant === "error" ? 7000 : 4500;
+      setToasts((current) => [...current, { id, variant, message, durationMs }].slice(-MAX_VISIBLE));
+      timers.current.set(id, window.setTimeout(() => dismiss(id), durationMs));
     },
     [dismiss],
   );
@@ -63,47 +72,43 @@ export function ToastProvider({ children }: { children: ReactNode }): JSX.Elemen
     <ToastContext.Provider value={value}>
       {children}
       <div
-        className="pointer-events-none fixed bottom-5 right-5 z-50 flex w-[min(23rem,calc(100vw-2.5rem))] flex-col gap-2"
+        className="pointer-events-none fixed inset-x-4 bottom-4 z-[60] flex flex-col gap-2.5 sm:inset-x-auto sm:bottom-6 sm:right-6 sm:w-[min(24rem,calc(100vw-3rem))]"
         role="status"
         aria-live="polite"
       >
-        {toasts.map((toast) => (
-          <div
-            key={toast.id}
-            className={`pointer-events-auto flex items-start gap-3 rounded-xl border px-4 py-3 text-sm shadow-lg shadow-black/40 backdrop-blur animate-fade-up ${VARIANT_STYLES[toast.variant]}`}
-          >
-            <svg
-              className="mt-0.5 h-4 w-4 shrink-0"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
+        {toasts.map((toast) => {
+          const variant = VARIANTS[toast.variant];
+          return (
+            <div
+              key={toast.id}
+              className="pointer-events-auto relative overflow-hidden rounded-2xl border border-line bg-panel shadow-pop animate-slide-in-right"
             >
-              <path d={VARIANT_ICON[toast.variant]} />
-            </svg>
-            <p className="flex-1 leading-snug text-fg/90">{toast.message}</p>
-            <button
-              type="button"
-              onClick={() => dismiss(toast.id)}
-              className="text-faint transition-colors hover:text-fg"
-              aria-label="Dismiss notification"
-            >
-              <svg
-                className="h-4 w-4"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-              >
-                <path d="M18 6 6 18M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-        ))}
+              <div className="flex items-start gap-3 p-3.5 pr-2">
+                <span
+                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${variant.iconBg}`}
+                >
+                  <Icon name={variant.icon} className="h-4 w-4" weight={2.1} />
+                </span>
+                <p className="flex-1 pt-1 text-sm leading-snug text-fg">{toast.message}</p>
+                <button
+                  type="button"
+                  onClick={() => dismiss(toast.id)}
+                  className="btn-icon h-7 w-7 shrink-0"
+                  aria-label="Dismiss notification"
+                >
+                  <Icon name="close" className="h-3.5 w-3.5" weight={2.2} />
+                </button>
+              </div>
+              {/* Countdown bar so the auto-dismiss is not a surprise. */}
+              <span
+                className={`absolute bottom-0 left-0 h-0.5 ${variant.bar}`}
+                style={{
+                  animation: `shrink-toast ${toast.durationMs}ms linear forwards`,
+                }}
+              />
+            </div>
+          );
+        })}
       </div>
     </ToastContext.Provider>
   );

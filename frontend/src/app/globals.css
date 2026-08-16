@@ -2,69 +2,250 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ---------------------------------------------------------------------------
+   Design tokens.
+
+   Both palettes are declared here as raw `R G B` triplets so Tailwind can wrap
+   them in `rgb(... / <alpha-value>)`. Switching themes is a single class on
+   <html>, applied before paint by the inline script in layout.tsx.
+   --------------------------------------------------------------------------- */
+
 :root {
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
-    Arial, sans-serif;
+  --font-sans: "Inter", "Inter var", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI Variable Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", Menlo, Consolas,
+    monospace;
+
+  /* Light — the default, so the page is readable even before hydration. */
+  color-scheme: light;
+
+  --canvas: 247 249 252;
+  --panel: 255 255 255;
+  --panel2: 241 245 249;
+  --line: 226 232 240;
+  --line2: 203 213 225;
+
+  --fg: 15 23 42;
+  --muted: 71 85 105;
+  --faint: 100 116 139;
+
+  --accent: 79 70 229;
+  --accent2: 8 145 178;
+  --on-accent: 255 255 255;
+
+  --real: 4 150 105;
+  --fake: 219 39 74;
+  --warn: 202 138 4;
+
+  --shadow: 15 23 42;
+
+  --aura-1: 79 70 229;
+  --aura-2: 8 145 178;
+  --aura-strength: 0.1;
+}
+
+.dark {
   color-scheme: dark;
+
+  --canvas: 9 12 19;
+  --panel: 17 22 33;
+  --panel2: 23 30 43;
+  --line: 35 44 60;
+  --line2: 52 65 86;
+
+  --fg: 232 238 248;
+  --muted: 155 168 189;
+  --faint: 111 126 148;
+
+  --accent: 129 124 255;
+  --accent2: 45 212 232;
+  --on-accent: 10 12 20;
+
+  --real: 16 185 129;
+  --fake: 251 113 133;
+  --warn: 245 158 11;
+
+  --shadow: 0 0 0;
+
+  --aura-1: 99 102 241;
+  --aura-2: 34 211 238;
+  --aura-strength: 0.14;
 }
 
 @layer base {
   html {
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+    scroll-behavior: smooth;
   }
 
   body {
     @apply bg-canvas text-fg;
     background-image:
-      radial-gradient(60rem 40rem at 15% -10%, rgba(99, 102, 241, 0.09), transparent 60%),
-      radial-gradient(50rem 34rem at 92% 0%, rgba(34, 211, 238, 0.07), transparent 55%);
+      radial-gradient(
+        60rem 40rem at 12% -12%,
+        rgb(var(--aura-1) / var(--aura-strength)),
+        transparent 62%
+      ),
+      radial-gradient(
+        52rem 34rem at 94% -4%,
+        rgb(var(--aura-2) / var(--aura-strength)),
+        transparent 58%
+      );
     background-attachment: fixed;
+    background-repeat: no-repeat;
   }
 
   ::selection {
-    @apply bg-accent/30 text-fg;
+    @apply bg-accent/25 text-fg;
   }
 
-  *:focus-visible {
-    @apply outline-none ring-2 ring-accent/70 ring-offset-2 ring-offset-canvas;
+  /* One consistent focus treatment everywhere, visible on both palettes. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-accent ring-offset-2 ring-offset-canvas;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
   }
 }
 
 @layer components {
   .card {
-    @apply rounded-2xl border border-line bg-panel;
+    @apply rounded-2xl border border-line bg-panel shadow-soft;
+  }
+
+  /* Cards that respond to pointer interaction (history tiles, modality tiles). */
+  .card-interactive {
+    @apply card transition-all duration-300 ease-out hover:-translate-y-0.5 hover:border-line2 hover:shadow-lift;
   }
 
   .section-title {
-    @apply text-xs font-medium uppercase tracking-[0.18em] text-faint;
+    @apply text-[11px] font-semibold uppercase tracking-[0.16em] text-faint;
   }
 
-  .btn-ghost {
-    @apply rounded-lg border border-line px-4 py-2.5 text-sm text-muted transition-colors hover:border-line2 hover:text-fg disabled:cursor-not-allowed disabled:opacity-40;
+  .eyebrow {
+    @apply inline-flex items-center gap-2 rounded-full border border-line bg-panel px-3 py-1 text-[11px] font-medium uppercase tracking-[0.14em] text-muted;
+  }
+
+  .btn {
+    @apply inline-flex select-none items-center justify-center gap-2 rounded-xl text-sm font-medium transition-all duration-200 ease-out disabled:pointer-events-none disabled:opacity-45;
   }
 
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-accent to-accent2 px-5 py-2.5 text-sm font-medium text-canvas transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply btn bg-accent px-5 py-2.5 text-on-accent shadow-soft hover:bg-accent/90 hover:shadow-glow active:scale-[0.98];
+  }
+
+  .btn-secondary {
+    @apply btn border border-line bg-panel px-4 py-2.5 text-fg hover:border-line2 hover:bg-panel2 active:scale-[0.98];
+  }
+
+  .btn-ghost {
+    @apply btn px-4 py-2.5 text-muted hover:bg-panel2 hover:text-fg active:scale-[0.98];
+  }
+
+  .btn-danger {
+    @apply btn border border-fake/35 bg-fake/10 px-4 py-2.5 text-fake hover:border-fake/60 hover:bg-fake/15 active:scale-[0.98];
+  }
+
+  .btn-icon {
+    @apply btn h-9 w-9 rounded-lg text-muted hover:bg-panel2 hover:text-fg;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-line bg-panel2 px-2.5 py-1 text-[11px] font-medium text-muted;
+  }
+
+  .field {
+    @apply w-full rounded-xl border border-line bg-panel px-3.5 py-2.5 text-sm text-fg placeholder:text-faint focus:border-accent/60;
+  }
+
+  /* Skeleton shimmer used by every loading placeholder. */
+  .skeleton {
+    @apply relative overflow-hidden rounded-2xl bg-panel2;
+  }
+
+  .skeleton::after {
+    content: "";
+    @apply absolute inset-0 animate-shimmer bg-gradient-to-r from-transparent via-fg/[0.06] to-transparent;
+  }
+
+  .divider {
+    @apply h-px w-full bg-line;
   }
 }
 
-/* Thin, dark scrollbars so horizontal strips do not break the theme. */
+@layer utilities {
+  .text-gradient {
+    @apply bg-gradient-to-br from-accent to-accent2 bg-clip-text text-transparent;
+  }
+
+  .glass {
+    @apply border-line/80 bg-canvas/75 backdrop-blur-xl backdrop-saturate-150;
+  }
+
+  /* Vertical rhythm used by every page shell. */
+  .stack-page {
+    @apply space-y-10 sm:space-y-12;
+  }
+}
+
+/* Toast auto-dismiss countdown bar. */
+@keyframes shrink-toast {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0%;
+  }
+}
+
+/* Scrollbars that follow the palette rather than fighting it. */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #2a3a4e transparent;
+  scrollbar-color: rgb(var(--line2)) transparent;
 }
 
 *::-webkit-scrollbar {
-  height: 8px;
-  width: 8px;
+  height: 9px;
+  width: 9px;
 }
 
 *::-webkit-scrollbar-thumb {
-  background-color: #2a3a4e;
+  background-color: rgb(var(--line2));
   border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(var(--faint));
 }
 
 *::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/* Honour the OS motion preference: keep state changes, drop the movement. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Prevent a flash of transitioning colours while the theme class swaps. */
+.theme-switching *,
+.theme-switching *::before,
+.theme-switching *::after {
+  transition: none !important;
 }

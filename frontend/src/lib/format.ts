@@ -94,11 +94,59 @@ export function formatElapsed(ms: number): string {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
+export interface ScoreTone {
+  /** Text colour class. */
+  text: string;
+  /** Solid fill for progress bars. */
+  bar: string;
+  /** Tinted background for icon chips. */
+  soft: string;
+  /** Border colour class for outlined surfaces. */
+  border: string;
+  /** One-word plain-English reading of the score. */
+  word: string;
+  /** CSS colour expression, for SVG and inline styles. */
+  css: string;
+}
+
 /** Colour ramp for a manipulation score: low = clean (green), high = fake (red). */
-export function scoreTone(score: number): { text: string; bar: string; ring: string } {
-  if (score < 0.35) return { text: "text-real", bar: "bg-real", ring: "#10b981" };
-  if (score < 0.65) return { text: "text-warn", bar: "bg-warn", ring: "#f59e0b" };
-  return { text: "text-fake", bar: "bg-fake", ring: "#f43f5e" };
+export function scoreTone(score: number): ScoreTone {
+  if (score < 0.35) {
+    return {
+      text: "text-real",
+      bar: "bg-real",
+      soft: "bg-real/10",
+      border: "border-real/35",
+      word: "Clean",
+      css: "rgb(var(--real))",
+    };
+  }
+  if (score < 0.65) {
+    return {
+      text: "text-warn",
+      bar: "bg-warn",
+      soft: "bg-warn/10",
+      border: "border-warn/35",
+      word: "Unclear",
+      css: "rgb(var(--warn))",
+    };
+  }
+  return {
+    text: "text-fake",
+    bar: "bg-fake",
+    soft: "bg-fake/10",
+    border: "border-fake/35",
+    word: "Suspect",
+    css: "rgb(var(--fake))",
+  };
+}
+
+/** Turns a 0-1 confidence into wording a non-specialist can act on. */
+export function confidenceWording(confidence: number): string {
+  if (confidence >= 0.9) return "Very high certainty";
+  if (confidence >= 0.75) return "High certainty";
+  if (confidence >= 0.6) return "Moderate certainty";
+  return "Low certainty — treat as inconclusive";
 }
 
 export function truncateMiddle(text: string, max = 34): string {

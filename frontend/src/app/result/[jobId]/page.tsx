@@ -9,6 +9,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { DownloadReportButton } from "@/components/DownloadReportButton";
 import { GradCamStrip } from "@/components/GradCamStrip";
 import { Icon } from "@/components/Icon";
+import { MethodNotice } from "@/components/MethodNotice";
 import { ModalityCard } from "@/components/ModalityCard";
 import { ProgressView } from "@/components/ProgressView";
 import { useToast } from "@/components/ToastProvider";
@@ -158,6 +159,8 @@ export default function ResultPage(): JSX.Element {
         filename={job.filename}
       />
 
+      <MethodNotice modelVersion={result.model_version} />
+
       {/* ------------------------------------------------------ gauge + source */}
       <div className="grid gap-5 lg:grid-cols-[minmax(0,330px)_minmax(0,1fr)]">
         <section className="card flex flex-col gap-5 p-6">
@@ -222,11 +225,11 @@ export default function ResultPage(): JSX.Element {
         </div>
       </section>
 
-      {/* ------------------------------------------------------------ grad-cam */}
+      {/* ------------------------------------------------------- artefact map */}
       <section className="space-y-4">
         <SectionHeading
-          title="Grad-CAM frames"
-          hint="regions that drove the visual decision — click to enlarge"
+          title="Artefact map"
+          hint="measured suspicion per region — click to enlarge"
         />
         <GradCamStrip frames={result.gradcam_frames} />
       </section>

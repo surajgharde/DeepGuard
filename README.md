@@ -1,11 +1,40 @@
 # DeepGuard
 
 Multimodal deepfake detection system — a full-stack UI over a visual / audio / lip-sync
-detector with a fusion classifier. Built as an MSc dissertation prototype.
+analyser with score fusion. Built as an MSc dissertation prototype.
 
-The app runs **today** against a `MockPipeline` that produces realistic staged output with
-artificial delay. Plugging in the real PyTorch models means implementing one class
-(`RealPipeline`) — no route, schema or frontend changes.
+## What the scores actually are
+
+The default pipeline (`heuristic`) **measures the uploaded file**. It decodes real frames
+with OpenCV, locates faces, and computes classical forensic signals on them; it decodes the
+real soundtrack and measures synthesis fingerprints; it cross-correlates real mouth motion
+against the real speech envelope. It is fully deterministic — the same file always produces
+the same verdict.
+
+It is **not a trained detector.** There is no neural network and no learned decision
+boundary: the thresholds in `app/inference/signals/` are hand-set operating points. The
+clean anchors were set by measuring genuine footage so ordinary video scores low; the
+suspicious anchors are reasoned from what each artefact looks like, *not* fitted to labelled
+deepfakes. Consequences, stated plainly:
+
+- **No accuracy figure can be quoted for this system**, and none should be. Precision,
+  recall and AUC require training and evaluating against a labelled corpus
+  (FaceForensics++, DFDC, Celeb-DF). See [Training a real model](#training-a-real-model).
+- It targets **face swaps**, not full synthesis. The visual features look for a face that
+  does not belong in its frame — a blend seam, a resolution mismatch. A clip generated whole,
+  internally consistent in every pixel, offers none of those and can score as clean.
+- It needs a **visible frontal face and audible speech**. Branches that cannot measure
+  anything report "not assessable" and are dropped from fusion rather than defaulting to 0.5.
+
+Every result carries this caveat in its `notes`, on the result page, and in the PDF export.
+
+### Pipelines
+
+| `DEEPGUARD_PIPELINE` | Behaviour |
+| --- | --- |
+| `heuristic` *(default)* | Measures the file. Deterministic. Described above. |
+| `mock` | **Never opens the video.** Verdict is `random() < 0.5` and scores are drawn from a distribution. UI development only; the result page shows a red demo warning. |
+| `real` | Unimplemented PyTorch stub — raises `NotImplementedError`. |
 
 ```
 DeepGuard/
@@ -63,7 +92,7 @@ Both sides are fully env-driven; no URLs are hardcoded.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `DEEPGUARD_PIPELINE` | `mock` | `mock` or `real` |
+| `DEEPGUARD_PIPELINE` | `heuristic` | `heuristic`, `mock` or `real` (see above) |
 | `DEEPGUARD_DATABASE_URL` | `sqlite:///.../deepguard.db` | SQLAlchemy URL |
 | `DEEPGUARD_PUBLIC_BASE_URL` | `http://localhost:8000` | Used to build absolute image/video URLs |
 | `DEEPGUARD_CORS_ORIGINS` | `http://localhost:3000,127.0.0.1:3000,:3001,:3002` | Comma-separated allowed origins |
@@ -91,7 +120,7 @@ Both sides are fully env-driven; no URLs are hardcoded.
 | `DELETE` | `/api/jobs/{job_id}` | Deletes the job row, the upload and all generated artefacts. |
 | `GET` | `/api/history?page=1&page_size=12` | Paginated past jobs with thumbnails and verdicts. |
 | `GET` | `/health` | Liveness + whether models are loaded + jobs in flight. |
-| `GET` | `/static/...` | Generated Grad-CAM frames and thumbnails. |
+| `GET` | `/static/...` | Generated artefact-map frames and thumbnails. |
 | `GET` | `/media/...` | Uploaded videos (so the result page can play the source clip). |
 
 Completed `result` payload:
@@ -105,30 +134,51 @@ Completed `result` payload:
     "audio":   { "score": 0.74, "label": "Questionable",     "explanation": "..." },
     "lipsync": { "score": 0.88, "label": "High mismatch",    "explanation": "..." }
   },
-  "gradcam_frames": ["http://localhost:8000/static/<job_id>/gradcam_01.jpg", "..."],
+  "gradcam_frames": ["http://localhost:8000/static/<job_id>/artefact_01.jpg", "..."],
   "thumbnail_url": "http://localhost:8000/static/<job_id>/thumb.jpg",
   "frames_analyzed": 101,
   "duration_seconds": 12.1,
-  "model_version": "mock-0.1.0",
-  "processing_time_ms": 14320,
+  "model_version": "heuristic-1.0.0",
+  "processing_time_ms": 4320,
   "notes": "..."
 }
 ```
 
-Per-modality `score` is **P(manipulated)**: higher means stronger manipulation evidence.
-`confidence` is confidence in the reported verdict.
+Per-modality `score` is how strongly that signal points to manipulation, higher meaning more
+evidence. It is a measurement mapped onto a hand-set scale, **not a calibrated probability**.
+`confidence` is distance from the decision threshold, discounted for thin evidence and capped
+at 0.85. A branch that could not be measured reports `score: 0.5` with a "not assessable"
+label and is excluded from fusion — check `notes` for which branches contributed.
+
+> `gradcam_frames` keeps its name for API compatibility, but under the `heuristic` pipeline
+> it carries measured artefact-map overlays on real frames, not network gradients.
 
 ---
 
-## Plugging in the real models
+## Training a real model
 
-1. Uncomment the torch/transformers block in `backend/requirements.txt` and install it.
-2. Fill in the four `TODO` blocks in `backend/app/inference/real.py`:
-   - load the four checkpoints in `__init__` and set `self._loaded = True`
+This is the work that would give the system a defensible accuracy figure. It is **not**
+started — `RealPipeline` is a stub.
+
+1. **Get a labelled corpus.** FaceForensics++, DFDC or Celeb-DF. All are access-gated behind
+   a signed research agreement and run to hundreds of gigabytes.
+2. **Get a CUDA GPU.** Not optional. Fine-tuning even a single EfficientNet-B0 visual branch
+   is impractical on integrated graphics; the full four-branch stack is a multi-GPU job.
+   Colab / Kaggle / RunPod are the usual routes if no local card is available.
+3. Uncomment the torch/transformers block in `backend/requirements.txt` and install it.
+4. Write the training scripts (dataset loaders, augmentation, per-branch training, fusion
+   head, held-out evaluation). None of this exists yet.
+5. Fill in the `TODO` blocks in `backend/app/inference/real.py`:
+   - load the checkpoints in `__init__` and set `self._loaded = True`
    - decode frames + detect faces, write a thumbnail into `output_dir`
-   - run the visual / audio / lip-sync branches, writing Grad-CAM overlays into `output_dir`
+   - run the visual / audio / lip-sync branches, writing genuine Grad-CAM overlays
+     (real gradients, unlike the heuristic pipeline's measured artefact map) into `output_dir`
    - fuse the branch outputs and return a `ResultDict`
-3. Set `DEEPGUARD_PIPELINE=real` and restart.
+6. Set `DEEPGUARD_PIPELINE=real` and restart.
+7. **Report the held-out metrics**, and only then quote an accuracy number anywhere.
+
+The heuristic pipeline is a reasonable baseline to compare a trained model against — it is
+reproducible and its features are documented per-branch in `app/inference/signals/`.
 
 The contract lives in `backend/app/inference/base.py`:
 
@@ -164,22 +214,26 @@ backend/
     routers/           analyze.py, jobs.py, history.py, health.py
     services/
       storage.py       upload validation, streaming save, cleanup
-      media.py         Pillow thumbnail + Grad-CAM rendering (mock only)
+      media.py         Pillow thumbnail + heatmap rendering (mock/seed only)
       job_runner.py    background task: pipeline -> DB progress/result
+      overlay.py       real frame + measured artefact-map rendering (heuristic)
     inference/
       base.py          InferencePipeline ABC, ResultDict, STAGES
-      mock.py          MockPipeline
-      real.py          RealPipeline stub
+      heuristic.py     HeuristicPipeline (default) - fusion + honest confidence
+      signals/         scan.py (decode + face detect), visual.py, audio.py,
+                       lipsync.py, scoring.py (all operating points live here)
+      mock.py          MockPipeline - random, never opens the video
+      real.py          RealPipeline stub - not implemented
   uploads/  outputs/   local file storage
 
 frontend/src/
   app/
     page.tsx                    Analyze: drag & drop, preview, live progress
-    result/[jobId]/page.tsx     Result: verdict, gauge, modalities, Grad-CAM, video, PDF
+    result/[jobId]/page.tsx     Result: verdict, gauge, modalities, artefact map, video, PDF
     history/page.tsx            Paginated grid with delete
     about/page.tsx              Method write-up (edit this text)
   components/                   NavBar, UploadZone, ProgressView, VerdictBanner,
-                                ConfidenceGauge, ModalityCard, GradCamStrip,
+                                ConfidenceGauge, ModalityCard, GradCamStrip, MethodNotice,
                                 VerdictBadge, DownloadReportButton, ToastProvider
   hooks/useJobPolling.ts        2 s polling, stops on terminal state
   lib/                          api.ts (typed client), types.ts (mirrors Pydantic),
@@ -196,5 +250,9 @@ frontend/src/
   failed job. The nav bar shows a live API/model status pill.
 - **Type checking**: `npm run typecheck` (frontend, strict mode). Every API response has a
   Pydantic model on the backend and a matching interface in `lib/types.ts`.
-- The mock pipeline takes roughly 12–18 s per run, which is deliberate — it exercises the
-  polling, progress and stage UI end to end.
+- **Runtime**: the heuristic pipeline takes roughly 3–6 s per clip on a laptop CPU (decode
+  dominates; 96 frames are sampled as 3 windows of 32 consecutive frames). The mock pipeline
+  sleeps for 12–18 s instead, to exercise the polling and progress UI.
+- **Seeded demo history** is generated by the mock pipeline, so those 5 rows carry
+  `model_version: mock-0.1.0` and the result page flags them with a red demo warning. Set
+  `DEEPGUARD_SEED_ON_STARTUP=false` to skip them.

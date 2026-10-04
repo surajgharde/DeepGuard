@@ -26,7 +26,9 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "DeepGuard API"
-    pipeline: str = "mock"  # "mock" | "real"
+    # "heuristic" measures the uploaded file; "mock" invents scores without
+    # opening it (UI development only); "real" is the unimplemented ML stub.
+    pipeline: str = "heuristic"
 
     database_url: str = f"sqlite:///{(BASE_DIR / 'deepguard.db').as_posix()}"
     public_base_url: str = "http://localhost:8000"

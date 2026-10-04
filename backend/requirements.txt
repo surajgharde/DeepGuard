@@ -6,10 +6,14 @@ pydantic-settings==2.7.0
 python-multipart==0.0.20
 Pillow==11.1.0
 
-# --- Added later for the real pipeline (kept commented so the mock stack stays light) ---
+# --- Media decoding + signal analysis (heuristic pipeline; CPU-only, no torch) ---
+numpy==2.2.1
+opencv-python==4.10.0.84
+imageio-ffmpeg==0.5.1
+
+# --- For a future trained pipeline (kept commented so the stack stays light) ---
 # torch==2.5.1
 # torchvision==0.20.1
 # torchaudio==2.5.1
 # transformers==4.47.1
-# opencv-python==4.10.0.84
 # facenet-pytorch==2.6.0

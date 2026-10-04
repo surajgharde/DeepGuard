@@ -69,6 +69,26 @@ export async function downloadReport(job: JobStatusResponse): Promise<void> {
   );
   y += 84;
 
+  // Method notice. A PDF outlives the page it came from and gets forwarded on
+  // its own, so how the verdict was produced has to travel with it -- directly
+  // under the banner, not only in the footer.
+  const method = methodNotice(result.model_version);
+  if (method) {
+    doc.setFillColor(254, 249, 231);
+    doc.setDrawColor(234, 179, 8);
+    const noticeLines = doc.splitTextToSize(method.body, pageWidth - margin * 2 - 28);
+    const noticeHeight = 26 + noticeLines.length * 10;
+    doc.roundedRect(margin, y, pageWidth - margin * 2, noticeHeight, 5, 5, "FD");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9.5);
+    doc.setTextColor(133, 77, 14);
+    doc.text(method.title, margin + 14, y + 17);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.text(noticeLines, margin + 14, y + 30);
+    y += noticeHeight + 18;
+  }
+
   // File metadata
   doc.setTextColor(INK.r, INK.g, INK.b);
   doc.setFont("helvetica", "bold");
@@ -132,14 +152,14 @@ export async function downloadReport(job: JobStatusResponse): Promise<void> {
     y += lines.length * 11 + 10;
   }
 
-  // Grad-CAM strip (best effort: skip silently if images cannot be fetched)
+  // Artefact-map strip (best effort: skip silently if images cannot be fetched)
   const frames = result.gradcam_frames.slice(0, 4);
   if (frames.length > 0) {
     y += 4;
     doc.setFont("helvetica", "bold");
     doc.setFontSize(12);
     doc.setTextColor(INK.r, INK.g, INK.b);
-    doc.text("Grad-CAM: regions influencing the visual decision", margin, y);
+    doc.text("Artefact map: measured suspicion per region", margin, y);
     y += 12;
 
     const dataUrls = await Promise.all(frames.map(fetchAsDataUrl));
@@ -168,4 +188,29 @@ export async function downloadReport(job: JobStatusResponse): Promise<void> {
   doc.text(doc.splitTextToSize(disclaimer, pageWidth - margin * 2), margin, footerY);
 
   doc.save(`deepguard-report-${job.job_id.slice(0, 8)}.pdf`);
+}
+
+/** How this result was produced, keyed off the pipeline that produced it. */
+function methodNotice(modelVersion: string): { title: string; body: string } | null {
+  if (modelVersion.startsWith("mock-")) {
+    return {
+      title: "DEMO MODE - THESE NUMBERS ARE RANDOMLY GENERATED",
+      body:
+        "This report was produced by the mock pipeline, which never opens the video. The verdict " +
+        "is a coin flip and the scores are drawn from a random distribution. It carries no " +
+        "information about the file and must not be used or circulated as an analysis of it.",
+    };
+  }
+  if (modelVersion.startsWith("heuristic-")) {
+    return {
+      title: "HEURISTIC SIGNAL ANALYSIS - NOT A TRAINED DETECTOR",
+      body:
+        "Every score below was measured directly from this file and is reproducible: the same " +
+        "file always yields the same numbers. However, the decision thresholds are hand-set " +
+        "rather than learned from labelled deepfakes, so this result has no validated accuracy " +
+        "figure. Treat it as forensic evidence to weigh alongside provenance and context - not " +
+        "as proof, not as evidence about a real person, and not as an experimental result.",
+    };
+  }
+  return null;
 }
